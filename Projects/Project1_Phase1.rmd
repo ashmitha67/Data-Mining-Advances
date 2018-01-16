@@ -1,0 +1,222 @@
+
+In the classification of the heart disease data set a high dimensional data set is used in the pre processing stage of data mining process. This raw dataset consist of redundant and inconsistent data thereby increasing the search space and storage of the data. To achieve the classification accuracy we need to remove the redundant and the irrelevant data present.
+
+Clinical diagnosis is done mostly by doctor's expertise and experience. But still cases are reported of wrong diagnosis and treatment.
+
+```{r}
+heart.data <- read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data",header=FALSE,sep=",",na.strings = '?')
+```
+
+Age: age in years
+Gender - (1 = male; 0 = female) 
+ChestPain - (1 = substernal; 0 = otherwise) 
+RestBP - Resting blood pressure
+Chol - serum cholesterol
+FBS - Fasting Blood Sugar
+RestECG - resting electrocardiographic results 
+    -- Value 0: normal 
+    -- Value 1: having ST-T wave abnormality (T wave inversions and/or ST                     elevation or depression of > 0.05 mV) 
+    -- Value 2: showing probable or definite left ventricular hypertrophy by Estes' criteria 
+MaxHR - MAximum Heart Rate
+ExAng - exercise induced angina
+OldPeak - ST depression induced by exercise relative to rest
+Slope: the slope of the peak exercise ST segment
+    -- Value 1: upsloping
+    -- Value 2: flat
+    -- Value 3: downsloping
+ca - HeartDiseaseber of major vessels (0-3) 
+thal: 
+  -- 3 = normal; 6 = fixed defect; 7 = reversable defect
+HeartDisease - diagnosis of heart disease
+  -- Value 0: < 50% diameter narrowing 
+  -- Value 1: > 50% diameter narrowing 
+We assume that every value with 0 means heart is okay, and 1 means heart disease.
+
+Data preparation :
+Load heart disease data and give columns names from the table above,
+```{r}
+names(heart.data) <- c( "Age", "Gender", "ChestPain", "RestBP", "Chol","FBS", "RestECG","MaxHR","ExAng", "OldPeak","Slope", "ca", "thal", "HeartDisease")
+
+#Check the dimension of the data
+dim(heart.data)
+```
+
+Exploring the data :
+
+```{r}
+heart.data$HeartDisease[heart.data$HeartDisease > 0] <- 1
+barplot(table(heart.data$HeartDisease), main="Diseased", col="Red")
+```
+
+```{r}
+heart.data$Age = as.numeric(heart.data$Age)
+heart.data$Gender=as.factor(heart.data$Gender)
+heart.data$ChestPain=as.factor(heart.data$ChestPain)
+heart.data$RestBP=as.numeric(heart.data$RestBP)
+heart.data$Chol=as.numeric(heart.data$Chol)
+heart.data$FBS=as.factor(heart.data$FBS)
+heart.data$RestECG=as.factor(heart.data$RestECG)
+heart.data$MaxHR=as.numeric(heart.data$MaxHR)
+heart.data$ExAng=as.factor(heart.data$ExAng)
+heart.data$OldPeak=as.numeric(heart.data$OldPeak)
+heart.data$Slope=as.factor(heart.data$Slope)
+heart.data$ca=as.factor(heart.data$ca)
+heart.data$thal=as.factor(heart.data$thal)
+heart.data$HeartDisease=as.factor(heart.data$HeartDisease)
+```
+#Or we can change using convert.magic to change a few predictor variables from integer to factors (make dummies) it doesn't work
+```{r}
+chclass <-c("numeric","factor","factor","numeric","numeric","factor","factor","numeric","factor","numeric","factor","factor","factor","factor")
+#heart.data <- convert.magic(heart.data,chclass)
+######################################################  
+```
+Add labels only for plot
+```{r}
+heart = heart.data 
+
+levels(heart$HeartDisease) = c("No disease","Disease")
+levels(heart$Gender) = c("female","male","")
+```
+Initial Plots:
+```{r}
+mosaicplot(heart$Gender ~ heart$HeartDisease,
+           main="Diseased by Gender", shade=FALSE,color=TRUE,
+           xlab="Gender", ylab="Heart disease")
+        
+boxplot(heart$Age ~ heart$HeartDisease, 
+        main="Diseased by Age",
+         ylab="Age",xlab="Heart disease",col.lab="Orange")
+
+```
+
+An histogram showing the count of the patients against the Maximum Heart Rate achieved.
+
+```{r}
+library(ggplot2)
+ggplot(heart, aes(MaxHR, fill="MaxHR")) + geom_histogram(position="identity", binwidth=1.55) +theme_minimal()
+```
+
+```{r}
+library(fmsb)
+
+#Creating a part of the data for the graph
+#For the min and the max
+data.h=as.data.frame(matrix( sample( 1:50 , 6, replace=T) , ncol=6))
+colnames(data.h) <- c( "Age","ChestPain", "RestECG","Gender","MaxHR","HeartDisease")
+
+#I have to add 2 lines to the dataframe: the max and min of each topic to show on the plot
+data.h=rbind(rep(50,10) , rep(0,10) , data.h)
+
+#Default radar chart
+radarchart(data.h)
+
+#Customized Chart
+radarchart( data.h  , axistype=1 ,
+    pcol=rgb(0.2,0.5,0.5,1.0) , pfcol=rgb(0.2,0.5,0.5,0.5) , 
+    cglcol="grey", cglty=1, axislabcol="grey", caxislabels=seq(0,20,5)
+    )
+```
+
+GGPlot showing the count of gender grouped by age
+```{r}
+Plot1 <- ggplot(heart.data, aes(Age)) + geom_histogram(binwidth = 1.5, color="white", aes(fill=..count..)) +facet_grid(Gender ~ .) + labs(title = "Heart")
+```
+Check for missing values - only 6 so just remove them.
+```{r}
+s = sum(is.na(heart.data))
+heart.data <- na.omit(heart.data)    
+```
+One effective way of data mining is by using decision tree. The decision tree is a type of algorithm that will help us select the necessary features from an extracted set of data. Using a decision tree numerous set of patterns hidden in the extracted data can be drawn out and a new set of target data can also be achieved. 
+
+Partition Data
+```{r}
+set.seed(123)
+```
+
+DECISION TREE based on Gender
+```{r,warning=FALSE,message=FALSE}
+library(RColorBrewer)
+library(rpart)
+library(rpart.plot)
+library(caret)
+
+heart.data$Age = as.numeric(heart.data$Age)
+heart.data$Gender=as.factor(heart.data$Gender)
+heart.data$ChestPain=as.factor(heart.data$ChestPain)
+heart.data$RestBP=as.numeric(heart.data$RestBP)
+heart.data$Chol=as.numeric(heart.data$Chol)
+heart.data$FBS=as.numeric(heart.data$FBS)
+heart.data$RestECG=as.factor(heart.data$RestECG)
+heart.data$MaxHR=as.numeric(heart.data$MaxHR)
+heart.data$ExAng=as.factor(heart.data$ExAng)
+heart.data$OldPeak=as.numeric(heart.data$OldPeak)
+heart.data$Slope=as.numeric(heart.data$Slope)
+heart.data$ca=as.numeric(heart.data$ca)
+heart.data$thal=as.factor(heart.data$thal)
+heart.data$HeartDisease=as.factor(heart.data$HeartDisease)
+
+
+#Based on Gender
+t <- createDataPartition(heart.data$Gender, p = 0.7, list = FALSE)
+train <- heart.data[t,]
+test <- heart.data[-t,]
+Accuracy <- vector()
+```
+DECISION TREE based on Gender
+
+```{r}
+tree <- rpart(formula = Gender ~ . , data = train, method="class")
+treePred <- predict(tree, test, type = "class")
+rpart.plot(tree,main="Decision tree Model")
+accDT<-eval(treePred,test$HeartDisease)
+```
+Accuracy = 70.45455
+While analysing the tree, Thal stands as the main node having many branches and ca, Slope,FBS has very few branches.
+
+```{r}
+heart.data$Age = as.numeric(heart.data$Age)
+heart.data$Gender=as.factor(heart.data$Gender)
+heart.data$ChestPain=as.numeric(heart.data$ChestPain)
+heart.data$RestBP=as.numeric(heart.data$RestBP)
+heart.data$Chol=as.numeric(heart.data$Chol)
+heart.data$FBS=as.numeric(heart.data$FBS)
+heart.data$RestECG=as.factor(heart.data$RestECG)
+heart.data$MaxHR=as.numeric(heart.data$MaxHR)
+heart.data$ExAng=as.factor(heart.data$ExAng)
+heart.data$OldPeak=as.numeric(heart.data$OldPeak)
+heart.data$Slope=as.numeric(heart.data$Slope)
+heart.data$ca=as.numeric(heart.data$ca)
+heart.data$thal=as.factor(heart.data$thal)
+heart.data$HeartDisease=as.factor(heart.data$HeartDisease)
+
+#Based on HeartDisease
+t1 <- createDataPartition(heart.data$HeartDisease, p = 0.7, list = FALSE)
+train1 <- heart.data[t1,]
+test1 <- heart.data[-t1,]
+Accuracy1 <- vector()
+```
+DECISION TREE based on HeartDisease
+
+```{r}
+tree1 <- rpart(formula = HeartDisease ~ . , data = train1, method="class")
+treePred1 <- predict(tree1, test1, type = "class")
+rpart.plot(tree1,main="Decision tree Model")
+print(eval(treePred1,test1$HeartDisease))
+accDT1<-eval(treePred1,test1$HeartDisease)
+```
+
+It is seen that accuracy rate has improved to 78.65169%. 
+
+Similarly, attributes can be optimised in order to achieve better result. On repeated adding and removal of attribute, the algorithm results maximum accuracy of 82.5%. Combine the attributes based on their accuracy achieved. Three attributes thalassemia, chest pain type, contribute maximum accuracy. 
+
+Accuracy table for Decision Tree:
+```{r}
+sum_table <- matrix(c(accDT, accDT1), ncol=1, nrow = 2, byrow = TRUE)
+colnames(sum_table) <- c("Accuracy")
+rownames(sum_table) <- c("Decision Tree1","Decision Tree 2")
+sum_table
+```
+Plot showing the accuracy of both the decision tree
+```{r}
+barplot(sum_table, col=rgb(0.2,0.4,0.6,0.6),main="Acuracy Plot", xlab="Decision Tree Models",ylim=c(0,200),ylab="Accuracy Rate",density=c(20,30) , angle=c(0,45),col.lab="Orange")
+```
