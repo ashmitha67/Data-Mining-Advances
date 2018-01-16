@@ -1,0 +1,176 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r}
+library(C50)
+data(churn)
+```
+Combining/merging two data sets churnTest and churnTrain to form one table i.e. churn
+```{r}
+churn <- rbind(churnTest, churnTrain) 
+```
+checking proprtion of customer leaving or retaining the services
+```{r}
+prop.table(table(churn$churn )) #gives the proportion
+table(churn$churn) #gives the number of YES and the number of NO
+```
+707 (~14%) customers who churned.
+visualizing outlier or wrong data enteriesi.e. Very low or high variance,errors,missing data.
+```{r}
+summary(churn)
+```
+Removing State, area_code, and account_length attributes,as they are not appropriate for classification features:
+```{r}
+myvars <- names(churn) %in% c('state','area_code','account_length')
+Churn_new <- churn[!myvars]
+```
+Converting character  variables to integer  variables using dummyvar function:
+```{r}
+library(caret)
+dummmy <- dummyVars(' ~ .', data = Churn_new, fullRank=T) #FullRank-factor column comprised of two levels
+Churn_new <- data.frame(predict(dummmy, newdata = Churn_new))
+```
+Applying factor variables
+```{r}
+names <- c('international_plan.yes' ,'voice_mail_plan.yes','churn.no')
+Churn_new[,names] <- lapply(Churn_new[,names] , factor)
+```
+Removing the near zero variance variable
+```{r}
+dim(Churn_new)
+nzv <- nearZeroVar(Churn_new)
+filtered_churn <- Churn_new [, -nzv]  #Removes the nzv variable
+str(filtered_churn)
+```
+Checking corellation,corellation refers to the extent to which two variables have a linear relationship with each other. 
+```{r}
+library(magrittr)
+library(dplyr)
+d.num <- filtered_churn %>% select (which(sapply(filtered_churn, is.numeric))) 
+# only numeric features
+high.corr.num <- findCorrelation(cor(d.num), cutoff = .75)
+names(d.num)[high.corr.num]
+```
+Removing total_night_minutes,total_eve_minutes,  and total_intl_charge attributes,as they are highly correlated 
+```{r}
+myvars1 <- names(filtered_churn ) %in% c('total_night_calls','total_night_minutes' ,'total_eve_minutes', 'number_customer_service_calls')
+filtered_churn <-filtered_churn[!myvars1]
+```
+data splitting: we divide in the ratio train:test as 70:30
+```{r}
+set.seed(123)
+d = sample(2,nrow(filtered_churn), replace = TRUE , prob = c(0.7,0.3))
+trainset = filtered_churn[d == 1,]
+testset = filtered_churn[d == 2,]
+dim(trainset)
+```
+
+```{r}
+library(party)
+library(partykit)
+diabTree <- ctree(churn.no ~ ., data = filtered_churn )
+plot(diabTree)
+```
+
+```{r}
+predicted.filtered_churn = predict(diabTree)
+tab <- table(real = filtered_churn$churn.no, predicted = predicted.filtered_churn)
+```
+Accuracy :
+
+```{r}
+mean(filtered_churn$churn.no == predict(diabTree))
+sum(diag(tab)) / sum(tab)
+```
+```{r}
+library(gmodels)
+ctab <-CrossTable(filtered_churn$churn.no,predicted.filtered_churn)
+ctab
+```
+Measures of Model Accuracy :
+Accuracy measure optimizes the correct results
+Ideally we want to maximize both Sensitivity & Specificity
+```{r}
+Accuracy <- print((tab[2,2]+tab[1,1])/sum(tab) * 100)
+Sensitivity <- print(tab[2,2]/(tab[2,2]+tab[1,2])*100)
+Specificity <- print(tab[1,1]/(tab[1,1]+tab[2,1])*100)
+```
+
+```{r}
+a <-ctab$prop.tbl
+p_o <- ctab$prop.tbl[1,1] + ctab$prop.tbl[2,2]
+p_o
+
+p_e <- (ctab$prop.tbl[1,1]+ctab$prop.tbl[2,1]) * (ctab$prop.tbl[1,1]+ctab$prop.tbl[1,2]) + (ctab$prop.tbl[2,1]+ctab$prop.tbl[2,2]) * (ctab$prop.tbl[1,2]+ctab$prop.tbl[2,2])
+p_e
+```
+classification accuracy - kappa
+```{r}
+kappa = (p_o - p_e) / (1 - p_e)
+```
+```{r}
+library(randomForest)
+ffit <- randomForest(churn.no ~ .,   data=filtered_churn, importance = TRUE)
+prob <- predict(ffit, type='prob')[,2]
+```
+ROC(Receiver operating characteristic) curve is drawn by taking False positive rate on X-axis and True positive rate on Y- axis
+ROC tells us, how many mistakes are we making to identify all the positives?
+```{r}
+library(ROCR)
+fit.pred = prediction(prob, filtered_churn$churn.no)
+fit.perf = performance(fit.pred,'tpr','fpr')
+plot(fit.perf, col='red')
+abline(a=0,b=1)
+```
+4.USE of classifiers - RF & KNN
+
+Multiple curves of RF & KNN
+```{r}
+library(caret)
+```
+Random Forest
+```{r}
+library(randomForest)
+RFTree <- randomForest(churn.no ~ ., data = trainset )
+prob <- predict(RFTree, type='prob')[,2]
+fit.pred = prediction(prob, trainset$churn.no)
+fit.perf = performance(fit.pred,'tpr','fpr')
+plot(fit.perf, type="o", col="blue", pch="o" )
+abline(a=0,b=1)
+```
+KNN
+```{r}
+knn_ffit <- knn3(churn.no ~ .,   data=trainset, k=10)
+knn_prob <- predict(knn_ffit, newdata = trainset, type='prob')[,2]
+fit.pred2 = prediction(knn_prob, trainset$churn.no)
+fit.perf2 = performance(fit.pred2,'tpr','fpr')
+
+old.par <- par(mfrow=c(1, 2))
+plot(fit.perf, type="o", col="blue", pch="o",main="RF" )
+plot(fit.perf2,col='red',main="KNN")
+par(old.par)
+```
+BOTH THE PLOTS in the same graph
+```{r}
+plot(fit.perf, col="blue",lty=2)
+par(new = TRUE)
+plot(fit.perf2,col='red',type="o",pch="o")
+abline(a=0,b=1)
+```
+
+AUC (Area Under the Curve) RF :
+```{r}
+fit.pred = prediction(prob, trainset$churn)
+fit.perf = performance(fit.pred,'auc') 
+fit.perf@y.values[[1]]
+```
+AUC (Area Under the Curve) KNN :
+```{r}
+fit.pred = prediction(knn_prob, trainset$churn)
+fit.perf = performance(fit.pred,'auc')
+fit.perf@y.values[[1]]
+```
+
+5.HENCE by AUC we find that KNN has better performance than RF in this case as it covers more area than RF.

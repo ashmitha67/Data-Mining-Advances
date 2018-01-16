@@ -1,0 +1,96 @@
+#LDA/QDA:Use the k-fold cross validation to assess the performance of lda/qda on the wines dataset.
+
+#Loading dataset and necessary library
+```{r, ignore = TRUE, include = FALSE}
+wines <- read.table("http://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv", sep=";", header=TRUE)
+
+library(MASS)
+library(randomForest)
+library(caret)
+library(lattice)
+library(ggplot2)
+```
+
+```{r}
+table(wines$quality)
+```
+#Categorizing each variable (Supplying categorical variables)
+For the target attribute we will create categorical variable with two different values good and bad, so we have binary classification problem. 
+I have categorised the target variable "quality" to two different values: 
+1: "good" if the original value of this attribute is bigger than 5 
+2: "bad" if the original value of this attribute is less than or equal 5
+```{r}
+winesb <- wines
+winesb$quality <- factor(ifelse(wines$quality > 5, "good", "bad")) 
+table(wines$quality)
+
+rf<- randomForest(quality~., data = winesb, importance=TRUE)
+importance(rf)
+varImpPlot(rf)
+```
+A different way is to examine the means of each of the variables broken down by the classification variable. Variables which show a large difference among the groups would most likely be the ones that are useful in predicting which group an observation belongs in. One graphical way of displaying this information is with a barplot. To make sure we can see differences for all the variables, we'll use the standardized version of the data:
+```{r}
+mns = aggregate(wines,wines['quality'],mean)
+rownames(mns) = mns$quality
+mns$quality = NULL
+barplot(as.matrix(mns),beside=TRUE,cex.names=.8,las=2,main="Plot to find the important Variables",ylab="Values")
+```
+
+The first model contains the first four important variables quality ~ alcohol + sulphates + total.sulfur.dioxide + volatile.acidity, while the second contains all variables 
+In both cases we will train on the training dataset and test on the testing dataset then compare between these classifiers.
+
+```{r}
+indxTrain <- createDataPartition(y = winesb$quality, p = 0.8)
+winesDataSetTrain<- winesb[indxTrain$Resample1,]
+winesDataSetTest <- winesb[-indxTrain$Resample1,]
+```
+#K-Fold cross validation
+```{r}
+train_control <- trainControl(method="cv", number=10)
+```
+#Training the model
+Done in more automatic way (by using 'Caret' package)
+```{r,message=F, warning=F}
+model <- train(quality~., data=winesb, trControl=train_control, method="nb")
+predictions <- predict(model, winesb)
+confusionMatrix(predictions, winesb$quality)
+```
+#Linear discriminant analysis (LDA)
+It groups follow Gaussian distribution which has the same structure of variance-covarianceand it has a difference in means.
+```{r}
+lda.model <- lda(quality~., data=winesb)
+lda.model
+
+lda.pred <- predict(lda.model, winesb)
+names(lda.pred)
+
+table(predicted = lda.pred$class, real = winesb$quality)
+```
+#For the first model we do LDA/QDA only for the most important variables got on the training set. We see that QDA performance is better than LDA.
+```{r}
+mat <- sapply(c('lda', 'qda'), function (met) {
+  modelFit<- train(quality~alcohol + sulphates + total.sulfur.dioxide + volatile.acidity, method=met,preProcess=c('scale', 'center'), data=winesDataSetTrain, trControl=train_control)
+  confusionMatrix(winesDataSetTest$quality, predict(modelFit, winesDataSetTest))$overall
+})
+
+round(mat*100,2)
+```
+#For the second model we do LDA/QDA for all the variables on the training set. We see that LDA performance is better than QDA.
+```{r}
+mat2 <- sapply(c('lda', 'qda'), function (met) {
+  modelFit<- train(quality~., method=met,preProcess=c('scale', 'center'), data=winesDataSetTrain, trControl=train_control)
+  confusionMatrix(winesDataSetTest$quality, predict(modelFit, winesDataSetTest))$overall
+})
+round(mat2*100,2)
+```
+#For the whole data set, all the variables. Here we see that the performance is almost the same.
+```{r}
+mat3 <- sapply(c('lda', 'qda'), function (met) {
+  modelFit<- train(quality~., method=met,preProcess=c('scale', 'center'), data=winesb, trControl=train_control)
+  confusionMatrix(winesb$quality, predict(modelFit, winesb))$overall
+})
+
+round(mat3*100,2)
+```
+#Conclusions
+We have tried LDA/QDA on three different datasets, LDA is a special case of QDA and in our example both approaches yield very similar results. They are not very good though, probably because the classes are not easy to separate with straight or quadratic lines.

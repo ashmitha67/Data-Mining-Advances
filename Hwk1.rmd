@@ -1,0 +1,313 @@
+---
+title: "Homework1"
+author: "Ashmitha Bonaventure"
+output:
+- default
+- toc: yes
+---
+1 importing files
+
+```{r}
+allegro <- read.csv('/Users/Ashmitha/Downloads/Subs/R/allegro-api-transactions.csv', header=TRUE, sep=",",encoding="UTF-8") 
+
+allegro_text <- read.table('/Users/Ashmitha/Downloads/Subs/R/allegro-categories-eng.txt', sep=";",header=TRUE,encoding="UTF-8") 
+```
+
+Summary and top 10 data of allegro & allegro_text
+
+```{r}
+summary(allegro) 
+summary(allegro_text)
+
+head(allegro, 10)
+head(allegro_text, 10)
+```
+
+2 Merge the files to translate main_category names.
+
+Joining the tables with left_join
+```{r}
+##install.packages("dplyr")
+
+#library(dplyr)
+##allegro_eng <- left_join(allegro, allegro_text, by = c("main_category" = "X.U.FEFF.main_category"))
+
+##head(allegro_eng[, c("item_id", "main_category", "main_category_eng")], 10)
+```
+
+or change the file to UTF-8 and do merge 
+```{r}
+allegro_eng <- merge(allegro_text,allegro, by= "main_category") 
+
+head(allegro_eng)
+```
+
+Summaries of the following variables price, it_is_allegro_standard, it_is_brand_zone, it_seller_rating, date will be done:
+```{r}
+allegro_data <- read.csv('/Users/Ashmitha/Downloads/Subs/R/allegro-api-transactions.csv', header=TRUE, sep=",",encoding="UTF-8")
+
+getwd() 
+setwd ("/Users/Ashmitha/Downloads/Subs/R/")
+##var_names = c("price", "it_is_allegro_standard", "it_is_brand_zone", "it_seller_rating", "date")
+##names(allegro_data) <- var_names
+##head(arrange(allegro_data$main_category,decreasing=T),n=5)
+#string as factor
+
+install.packages("sqldf") 
+library(sqldf)
+
+summary (sqldf("select price, it_is_allegro_standard, it_is_brand_zone, it_seller_rating, date from allegro_data" )) 
+par(mar=c(5,15,5,5))
+```
+
+A Plot showing the summaries of price, it_is_allegro_standard, it_is_brand_zone, it_seller_rating, date
+
+```{r}
+boxplot(allegro_data,col = "blue",main="summary of price, it_is_allegro_standard, it_is_brand_zone, it_seller_rating, date ",xlab="price, it_is_allegro_standard, it_is_brand_zone, it_seller_rating, date",ylab="values")
+```
+
+A Plot showing the price of last 5 items in the last 5 locations
+
+```{r}
+g1=ggplot(tail(allegro_data,5), aes(x=price,y=it_location),
+          main="Graph of price of items sold in the cities")+geom_point(size=4)
+g1
+```
+
+A Plot showing the top 5 sellers in the top 5 locations
+
+```{r}
+g2=ggplot(head(allegro_data,5), aes(x=seller,y=it_location),
+          (color=factor(allegro_data$it_is_allegro_standard)),
+          main="Graph of seller in particular location")+geom_point(size=2)
+g2
+
+```
+
+We need to select top 5 categories hence we will find the frequencies of each category and then filter to only the best 5.
+
+```{r}
+#sort the table for top 5 transactions
+sort(table(allegro_eng$main_category_eng), decreasing=TRUE)
+
+#Create a new table with only these categories.
+top5 <- c(" Home & Garden", " Clothing, Shoes, Accessories", " Automotive", " Babies", " Beauty")
+allegro_trans_top <- subset(allegro_eng, allegro_eng$main_category_eng %in% top5)
+
+head(allegro_trans_top)
+
+```
+NUMERICAL SUMMARIES :
+
+Is Allegro Standard:
+```{r}
+sort(table(allegro_trans_top$it_is_allegro_standard), decreasing=TRUE)
+```
+
+In the top 5 categories " Home & Garden", " Clothing, Shoes, Accessories", " Automotive", " Babies", " Beauty" the allegro standard value 0 or 1 is calculated and the count is displayed.
+
+Brand Zone:
+```{r}
+sort(table(allegro_trans_top$it_is_brand_zone), decreasing=TRUE)
+```
+
+In the top 5 categories " Home & Garden", " Clothing, Shoes, Accessories", " Automotive", " Babies", " Beauty" the brand zone value 1 or 0 is calculated and teh count of each is displayed.
+
+Transaction Date:
+A table with the dates of teh top 5 categories is created
+```{r}
+dd=table(allegro_trans_top$date)
+```
+
+The time is stripped from the timestamp and it is observed that on 2016-04-03 there are 219336 transactions.
+
+```{r}
+dd1<- format(as.POSIXct(allegro_trans_top$date), "%Y-%m-%d")
+head(dd1,10000)
+sort(table(dd1), decreasing=FALSE)
+```
+
+Nummerical summary of Price where the maximum cost is 119000.00 for the seller POLTRANS-Matysek and the min is 0:
+```{r}
+summary(allegro_trans_top$price)
+```
+
+Seller Rating:
+
+The maximum number of seller rating got is 260173 and the minimum is -1
+```{r}
+summary(allegro_trans_top$it_seller_rating)
+```
+Graphical Summaries :
+
+Graph for the top 5 categories and Is Allegro Standard:
+```{r}
+all_standard <- table(allegro_trans_top$it_is_allegro_standard)
+par(mar=c(5,15,5,5))
+barplot(all_standard, horiz = FALSE, col="red",main="Graph of Allegro standard against the top 5 transactions",xlab="Allegro standard values", ylab="Values of transactions")
+
+```
+
+Graph for the top 5 categories and Brand Zone:
+
+```{r}
+b_zone <- table(allegro_trans_top$it_is_brand_zone)
+barplot(b_zone, col="lightblue",main="Graph of Brand zone against the top 5 transactions",
+        xlab="Brand zone values", ylab="Values of transactions")
+```
+
+Graph for the top 5 categories and Price:
+
+```{r}
+par(mar=c(5,5,2,2))
+#hist(allegro_trans_top$price, col="red")
+boxplot(allegro_trans_top$price, horizontal = TRUE,main="Graph of Price against the top 5 transactions",
+        ylab="Price values", xlab="Values of transactions")
+```
+
+Histogram of top 5 categories and Seller Rating:
+
+```{r}
+hist(allegro_trans_top$it_seller_rating, col="darkred",main="Histogram of Seller Rating against the top 5 transactions",
+     xlab="Seller Rating values", ylab="Values of transactions")
+```
+
+Plot of top 5 categories and Seller Rating:
+
+```{r}
+boxplot(allegro_trans_top$it_seller_rating, horizontal = TRUE,main="Graph of Seller Rating against the top 5 transactions",
+        ylab="Seller Rating values", xlab="Values of transactions",ylim=c(50000,250000))
+```
+
+Price by Brand Zone:
+
+Brand Zone 0 : The max price is 119000 with a min of 0
+Brand Zone 1 : The max price is 3995 with a min of 1.19
+```{r}
+by(allegro_trans_top$price, allegro_trans_top$it_is_brand_zone, summary)
+```
+Seller Rating by Brand Zone:
+
+Brand Zone 0 : The max rating is 260173 with a min of 0
+Brand Zone 1 : The max price is 3913357995 with a min of 1.19
+
+```{r}
+by(allegro_trans_top$it_seller_rating, allegro_trans_top$it_is_brand_zone, summary)
+```
+
+Price by Allegro Standard:
+
+Allegro Standard 0: The max price is 119000 with a min of 0
+Allegro Standard 1: The max price is 7400 with a min of 1
+```{r}
+by(allegro_trans_top$price, allegro_trans_top$it_is_allegro_standard, summary)
+```
+
+Seller Rating by Allegro Standard:
+
+Allegro Standard 0: The max seller rating is 260173 with a min of -1
+Allegro Standard 1: The max seller rating is 252035 with a min of 103
+```{r}
+by(allegro_trans_top$it_seller_rating, allegro_trans_top$it_is_allegro_standard, summary)
+```
+
+Violin plots of Item_Id and it's price:
+```{r}
+library(vioplot)
+x1 <- allegro_trans_top$item_id
+x2 <- allegro_trans_top$price
+vioplot(x1, x2,col="gold",names=c("1000","119000"),ylim =c(0,100000))
+title("Violin Plots of Item_Id and it's price")
+```
+Conclusions 
+Most of items are of Allegro standard and in Brand Zone 0. 
+On 2016-04-03 22:32:33 the most number of recorded transactions were made with the value being 105. 
+Following that were transactions made around 2 hours earlier with the number being 95.
+The mean price of items is 80.59 while the maximum found is 119000.00. On average the seller's rating is 19020. 
+The mean prices are higher in zone 1, but the maximum price was recorded in the zone 0. On the other hand the seller rating is greater in the zone 1.
+Allegro standard seems to affect both the price and seller rating, because in both cases the aforementioned factors were higher.
+
+#5
+```{r}
+library(PogromcyDanych)
+```
+6
+Changing the language to English
+
+```{r}
+setLang(lang = "eng")
+```
+7
+Summaries of jumpSpeed, jumpDistance, compCountry, jumperCountry, jumperDateOfBirth variables
+```{r}
+library(sqldf) 
+summary (sqldf("select jumpSpeed, jumpDistance, compCountry, jumperCountry, jumperDateOfBirth from var_names_ski" ))
+```
+#8
+2014 data is extracted from skiJumps2013 
+```{r}
+install.packages("knitr")
+
+final_ski<-skiJumps2013[skiJumps2013$compDate >= "2014-01-01" & skiJumps2013$compDate <= "2014-12-31",]
+
+skiJumps2014 <- subset(var_names_ski, as.Date(var_names_ski$compDate) >= "2014-01-01")
+```
+
+Summary of 2014 data
+```{r}
+summary(final_ski)
+```
+
+Graph Histogram and Boxplot of Jump Speed and the frequency:
+```{r}
+par(mar=c(5,5,2,2))
+hist(final_ski$jumpSpeed, col="lightblue",main="Graph of Jump Speed",
+     xlab="Jump speed values",xlim=c(70,100))
+boxplot(final_ski$jumpSpeed, horizontal = TRUE,main="Graph of Jump Speed in 2014",
+        xlab="Jump speed values",ylim=c(80,100))
+```
+Histogram of Jump Point:
+```{r}
+hist(final_ski$jumpPoints, col="lightgreen",main="Graph of Jump Points in 2014",
+     xlab="Jump Points values")
+```
+
+Boxplot of Jump Distance values
+```{r}
+boxplot(final_ski$jumpDistance, horizontal = TRUE,main="Graph of Jump Distance in 2014",
+        xlab="Jump Distance values")
+```
+
+Countries table is created which is a combo of CompCountry & JumperCountry
+```{r}
+countries <- table(final_ski$compCountry, final_ski$jumperCountry)
+```
+
+Mosaicplot of Jumper country & Competition Country :
+Germany has the highest maximum jumping speed (101.50) while Slovenia has the highest maximum jumping distance (199.0). On the other hand Romania has the lowest mean jumping speed (88.97) and Japan has the lowest mean in jumping distance (112.0)
+Most of competitions were held in, respectively, Austria, Germany and Finland. 
+The first two countries also have the biggest number of jumpers.
+```{r}
+mosaicplot(countries, las=2, color = c("orange", "yellow","black","lightblue"),
+           main="Graph of Competition countries and jump countries in 2014",
+           ylab="Jumper country",xlab="competition country" )
+```
+
+The country of jumpers with their DOB
+```{r}
+country_bday <- table(final_ski$jumperCountry, final_ski$jumperDateOfBirth)
+```
+
+Most of the competitors were born in 1991 and the second most frequent birth year is 1989 with the frequency being almost only a half of the aforementioned year.
+
+```{r}
+by(final_ski$jumperDateOfBirth, final_ski$jumperCountry, summary)
+```
+
+Boxplot of Jumpspeed & JumpDistance
+In terms of the jump itself, the usual speed is around 80 to 100 while the distance is between 100 and 150.
+
+```{r}
+boxplot(final_ski$jumpDistance, final_ski$jumpSpeed,main="Graph of jumpspeed and jumpdistance in 2014",ylab="jumpdistance",xlab="jumpspeed",ylim=c(0,200))
+par(mar=c(5,15,2,2))
+```

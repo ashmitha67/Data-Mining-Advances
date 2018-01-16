@@ -1,0 +1,166 @@
+#Description Given is Walmart's transactional dataset. The task is to classify customer shopping trips The goal of this homework is to create a model which results will be within the top 150 from the Kaggle leaderboard:
+
+```{r}
+library(caret)
+library(dplyr)
+library(tidyr)
+library(randomForest)
+
+data <- read.csv(("/Users/Ashmitha/Downloads/train.csv"), header=TRUE, sep=",", encoding="UTF-8")
+head(data)
+
+```
+
+TripType - a categorical id representing the type of shopping trip the customer made. This is the ground truth that you are predicting. TripType_999 is an "other" category.
+
+VisitNumber - an id corresponding to a single trip by a single customer. It is non-predictive hence will be excluded.
+
+Weekday - the weekday of the trip.
+
+Upc - the UPC number of the product purchased.
+
+ScanCount - the number of the given item that was purchased. A negative value indicates a product return.
+
+DepartmentDescription - a high-level description of the item's department.
+
+FinelineNumber - a more refined category for each of the products, created by Walmart.
+
+data %>% filter(VisitNumber == 7)
+
+#Extracting features
+ProductsCountInVis - Products purchased per visit number where scan count is 0 or more
+
+newDepartmentsInVis = data %>%
+  group_by(VisitNumber) %>%
+  summarise(
+    ProductsCountInVis = sum(ScanCount >=0)
+  )
+
+head(newDepartmentsInVis)
+
+ProductsCountInDept - Products purchased per visit number and DepartmentDescription where scan count is 0 or more
+
+newDepartments = data %>%
+  group_by(VisitNumber, DepartmentDescription) %>%
+  summarise(
+    ProductsCountInDept = sum(ScanCount >=0)
+  )
+head(newDepartments)
+
+Join on newDepartmentsInVis and newDepartments on VisitNumber
+tempData <- merge(newDepartmentsInVis,newDepartments,by="VisitNumber")
+head(tempData)
+
+tempData$ProductsCountInDept = tempData$ProductsCountInDept / tempData$ProductsCountInVis  
+
+#Data Tidying
+Spread DepartmentDescription, across multiple columns(VisitNumber,ProductsCountInVis), missing values will be replaced with fill value which is 0.
+
+library(tidyr)
+
+TransformedDepartment = tempData %>%
+  spread(DepartmentDescription, ProductsCountInDept, fill=0)
+
+head(TransformedDepartment)
+
+newData is a composition of data per VisitNumber on a particular day the count of products sold, with number of returned products.
+
+newData = data %>%
+  group_by(VisitNumber) %>%
+  summarise(
+    TripType = head(TripType, 1),
+    day = unique(Weekday)[1], 
+    ProductsCount = sum(ScanCount >= 0),
+    unique_FinelineNumber = length(unique(FinelineNumber)),
+    no_of_returned_products = sum(ScanCount < 0),
+    unique_departments = length(unique(DepartmentDescription)),
+    sum_of_products = sum(ScanCount)
+  )
+
+head(newData)
+
+Joining newData with TransformedDepartment on VisitNumber, by this the products count on a particular day for each department is shown.
+finalData <- merge(newData,TransformedDepartment,by="VisitNumber")
+head(finalData)
+
+colnames(finalData) = make.names(colnames(finalData))
+
+finalData$TripType <-factor(finalData$TripType)
+summary(finalData)
+
+# dividing dataset into train and test part
+indxSample <- sample(seq_len(nrow(finalData)), size = 1000)
+sample <- finalData[indxSample, ]
+
+prop.table(table(sample$TripType))
+
+nzv <- nearZeroVar(sample)
+names(sample)[nzv]
+data <- sample[, -nzv]
+
+data$TripType <- factor(data$TripType)
+levels(data$TripType)
+
+names(data) = make.names(names(data), unique = FALSE)
+sample=data
+set.seed(1313)
+indxTrain <- createDataPartition(y = finalData$TripType, p = 0.75)
+str(indxTrain)
+
+kagTrain <- finalData[indxTrain$Resample1,]
+kagTest <- finalData[-indxTrain$Resample1,]
+
+library(randomForest)
+
+# using Random Forest classifier
+rf <- randomForest(TripType~., data=kagTrain)
+confusionMatrix = confusionMatrix(kagTest$TripType, predict(rf, kagTest))$overall
+scores <- predict(rf, kagTest, type = "prob")
+
+# calculating final score
+myScores <- sapply(1:nrow(kagTest), function(i){
+  scores[i, kagTest$TripType[i]]
+})
+
+mean(-log(pmax(myScores,0.05)))
+
+#using important features
+```{r}
+ffit <- randomForest(factor(TripType) ~ sum_of_products + unique_departments +VisitNumber, data=kagTrain, importance = TRUE)
+print(ffit)
+
+scores <- predict(ffit, kagTest, type="prob")
+head(scores)
+
+myScores <- sapply(1:nrow(kagTest), function(i){
+  scores[i, as.character(kagTest$TripType[i])]
+})
+
+mean(-log(pmax(myScores,0.05)))
+```
+
+#KNN 
+```{r}
+knnFit <- knn3(TripType ~ ., data = kagTrain, k=20, prob=TRUE)
+scoresknn <- predict(knnFit, kagTest, type="prob")
+head(scoresknn)
+
+myScoresknn <- sapply(1:nrow(kagTest), function(i){
+  scoresknn[i, as.character(kagTest$TripType[i])]
+})
+
+mean(-log(pmax(myScoresknn,0.05)))
+```
+
+#KNN with important features
+```{r}
+knnFit <- knn3(TripType ~ sum_of_products + unique_departments +VisitNumber, data = kagTrain, k=20, prob=TRUE)
+scoresknn1 <- predict(knnFit, kagTest, type="prob")
+head(scoresknn1)
+
+myScores1 <- sapply(1:nrow(kagTest), function(i){
+  scoresknn1[i, as.character(kagTest$TripType[i])]
+})
+
+mean(-log(pmax(myScores1,0.05)))
+```
